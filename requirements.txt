@@ -1,0 +1,5 @@
+fsspec
+pandas
+streamlit
+s3fs
+altair
