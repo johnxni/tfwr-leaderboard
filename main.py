@@ -16,7 +16,7 @@ from utils.typing import (
     gap_ms_to_str,
     ms_to_str,
 )
-from utils.prettify import prettify_colnames, series_human_friendly_time, format_delta
+from utils.prettify import series_human_friendly_time, format_delta
 
 
 def get_leaderboard_color(leaderboard_name):
@@ -60,21 +60,6 @@ def get_last_updated(df_over_time):
     return last_updated
 
 
-def display_dataframe(df, leaderboard_name):
-    condition = df["leaderboard_name"] == leaderboard_name
-
-    duration_cols = df.select_dtypes(include=["timedelta64[ns]"])
-    column_config = {
-        prettify_colnames(col): st.column_config.TimeColumn(format="HH:mm:ss.ms")
-        for col in duration_cols.columns
-    }
-
-    display_columns = {col: prettify_colnames(col) for col in df.columns}
-    st.dataframe(
-        df[condition].rename(columns=display_columns), column_config=column_config
-    )
-
-
 def display_top3(df_snapshot, leaderboard_name):
     top_n = 3
     condition = (df_snapshot["leaderboard_name"] == leaderboard_name) & (
@@ -99,11 +84,11 @@ def display_percentiles(percentiles):
             time = ms_to_str(percentiles[field])
             if time.count(':') == 2:
                 time = time[:-4]  # prevent '...' from showing
-            st.metric(title, time, delta=None, border=False)
+            st.metric(title, time, delta=None, border=True)
 
     with boxes[-1]:
         st.metric(
-            label="Entries", value=percentiles["entry_count"], delta=None, border=False
+            label="Entries", value=percentiles["entry_count"], delta=None, border=True,
         )
 
 
@@ -111,7 +96,6 @@ def display_leaderboard(df_leaderboard, leaderboard_name, top_n=100, height=1600
     condition = (df_leaderboard["leaderboard_name"] == leaderboard_name) & (
         df_leaderboard["rank"] <= top_n
     )
-    num_rows = df_leaderboard[condition].shape[0]
 
     df_leaderboard["Time"] = df_leaderboard["duration_ms"].apply(ms_to_str)
     df_leaderboard["Gap"] = df_leaderboard["gap_prev_ms"].apply(gap_ms_to_str)
@@ -122,11 +106,7 @@ def display_leaderboard(df_leaderboard, leaderboard_name, top_n=100, height=1600
 
     out_cols = ["rank", "steam_name", "Time", "Gap", "Gap To Leader", "Date"]
     column_renames = {"rank": "Rank", "steam_name": "Player"}
-    st.dataframe(
-        df_leaderboard[condition][out_cols].rename(columns=column_renames),
-        hide_index=True,
-        height=height if num_rows >= 50 else 'auto',
-    )
+    st.table(df_leaderboard[condition][out_cols].rename(columns=column_renames).set_index('Rank'))
 
 
 def info_box(icon, name, time, color="#262730"):
@@ -162,7 +142,12 @@ def display_last_updated(last_updated_string):
 
 def _get_query_leaderboard():
     leaderboards = st.query_params.get_all('leaderboard')
-    return leaderboards[0] if leaderboards else 'Overview'
+    lb = leaderboards[0] if leaderboards else 'Overview'
+
+    if lb in TABS:
+        return lb
+    else:
+        return 'Overview'
 
 
 def _set_query_leaderboard(value: str):
@@ -171,6 +156,7 @@ def _set_query_leaderboard(value: str):
 
 def main():
     st.set_page_config("TFWR Leaderboards", ":trophy:")
+    st.set_page_config(layout="wide")
 
     df_over_time, last_updated = load_over_time()
     df_snapshot = load_gaps_latest()
@@ -178,24 +164,12 @@ def main():
 
     # Initialize from query param if provided
     qp_selected = _get_query_leaderboard()
-    if "selected_leaderboard" not in st.session_state:
-        st.session_state.selected_leaderboard = (
-            qp_selected if qp_selected in TABS else TABS[0]
-        )
-    else:
-        # If the query param differs and is valid, sync session state
-        if qp_selected in TABS and qp_selected != st.session_state.selected_leaderboard:
-            st.session_state.selected_leaderboard = qp_selected
-
-    # Ensure URL stays in sync with selection as early as possible (covers initial bare URL)
-    if _get_query_leaderboard() != st.session_state.selected_leaderboard:
-        _set_query_leaderboard(st.session_state.selected_leaderboard)
-
+    st.session_state.selected_leaderboard = qp_selected
     with st.sidebar:
         st.write("The Farmer Was Replaced Leaderboards")
-        hide_top_100 = True
+
         for name in TABS:
-            is_active = name == st.session_state.selected_leaderboard
+            is_active = name == st.session_state.selected_leaderboard 
             button_name = f"{get_emoji(name)} {name}"
             if st.button(
                 button_name,
@@ -205,6 +179,7 @@ def main():
             ):
                 st.session_state.selected_leaderboard = name
                 _set_query_leaderboard(name)
+                st.rerun()
 
     selected_leaderboard = st.session_state.selected_leaderboard
     if selected_leaderboard == 'Overview':
@@ -213,7 +188,6 @@ def main():
             display_leaderboard(df_snapshot, leaderboard_name, top_n=10, height='auto')
             display_last_updated(last_updated[leaderboard_name])
             st.divider()
-
     else:
         st.header(f"{get_emoji(selected_leaderboard)} {selected_leaderboard} Leaderboards")
         display_top3(df_snapshot, selected_leaderboard)
@@ -224,7 +198,7 @@ def main():
 
         st.subheader("Leaderboard History")
         display_over_time_chart(
-            df_over_time, selected_leaderboard, hide_top_100=hide_top_100
+            df_over_time, selected_leaderboard, hide_top_100=True
         )
 
         st.subheader("Leaderboard")
