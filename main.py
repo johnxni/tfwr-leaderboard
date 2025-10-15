@@ -161,48 +161,12 @@ def display_last_updated(last_updated_string):
 
 
 def _get_query_leaderboard():
-    """Return leaderboard value from URL query params; supports new and experimental APIs."""
-    # Newer Streamlit API (st.query_params) returns a dict-like object
-    try:
-        qp = st.query_params  # type: ignore[attr-defined]
-        value = qp.get("leaderboard")
-        if isinstance(value, str) and value:
-            return value
-    except Exception:
-        pass
-
-    # Fallback to experimental API which returns dict[str, list[str]]
-    try:
-        qp = st.experimental_get_query_params()
-        values = qp.get("leaderboard")
-        if values and len(values) > 0:
-            return values[0]
-    except Exception:
-        pass
-    return None
+    leaderboards = st.query_params.get_all('leaderboard')
+    return leaderboards[0] if leaderboards else 'Overview'
 
 
 def _set_query_leaderboard(value: str):
-    """Set leaderboard value into URL query params; supports new and experimental APIs.
-    Preserves any existing query parameters.
-    """
-    try:
-        # Newer API supports assignment like a dict and preserves others automatically
-        qp = st.query_params  # type: ignore[attr-defined]
-        if qp.get("leaderboard") != value:
-            qp["leaderboard"] = value
-        return
-    except Exception:
-        pass
-
-    try:
-        # Preserve existing params with experimental API
-        existing = st.experimental_get_query_params()
-        existing["leaderboard"] = value
-        st.experimental_set_query_params(**existing)
-    except Exception:
-        # If even this fails, ignore silently to avoid breaking the UI
-        pass
+    st.query_params.from_dict({'leaderboard': value})
 
 
 def main():
