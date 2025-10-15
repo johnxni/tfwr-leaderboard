@@ -16,9 +16,9 @@ def format_delta(td):
     elif seconds < 3600:
         return f"{seconds // 60} minutes ago"
     elif seconds < 86400:
-        return f"{seconds // 3600} hours ago"
+        return f"{seconds // 3600} hour(s) ago"
     else:
-        return f"{seconds // 86400} days ago"
+        return f"{seconds // 86400} day(s) ago"
 
 
 def series_human_friendly_time(series):
