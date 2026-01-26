@@ -1,5 +1,5 @@
 fsspec
 pandas
-streamlit
+streamlit>=1.52.0
 s3fs
 altair<5
