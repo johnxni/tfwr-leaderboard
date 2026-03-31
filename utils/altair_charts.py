@@ -251,10 +251,10 @@ def display_over_time_chart(
                     alt.Tooltip("value_hms:N", title="Duration"),
                 ],
             )
-            .add_selection(hover)
+            .add_params(hover)
         )
 
-        chart = (line + rule).properties(height=300).add_selection(zoom_x)
+        chart = (line + rule).properties(height=300).add_params(zoom_x)
     else:
         # Build domain/range mappings for color and dash
         domain = series_values
@@ -301,9 +301,9 @@ def display_over_time_chart(
                 ]
                 + [alt.Tooltip(f"{sv}_hms:N", title=str(sv)) for sv in domain],
             )
-            .add_selection(hover)
+            .add_params(hover)
         )
 
-        chart = (line + rule).properties(height=300).add_selection(zoom_x)
+        chart = (line + rule).properties(height=300).add_params(zoom_x)
 
     st.altair_chart(chart, use_container_width=True)
