@@ -92,21 +92,23 @@ def display_percentiles(percentiles):
         )
 
 
-def display_leaderboard(df_leaderboard, leaderboard_name, top_n=100, height=1600):
+@st.cache_data(ttl=300)
+def _format_leaderboard(df_leaderboard, leaderboard_name, top_n):
     condition = (df_leaderboard["leaderboard_name"] == leaderboard_name) & (
         df_leaderboard["rank"] <= top_n
     )
-
-    df_leaderboard["Time"] = df_leaderboard["duration_ms"].apply(ms_to_str)
-    df_leaderboard["Gap"] = df_leaderboard["gap_prev_ms"].apply(gap_ms_to_str)
-    df_leaderboard["Gap To Leader"] = df_leaderboard["gap_leader_ms"].apply(
-        gap_ms_to_str
-    )
-    df_leaderboard["Date"] = series_human_friendly_time(df_leaderboard["achieved_at"])
-
+    filtered = df_leaderboard[condition].copy()
+    filtered["Time"] = filtered["duration_ms"].apply(ms_to_str)
+    filtered["Gap"] = filtered["gap_prev_ms"].apply(gap_ms_to_str)
+    filtered["Gap To Leader"] = filtered["gap_leader_ms"].apply(gap_ms_to_str)
+    filtered["Date"] = series_human_friendly_time(filtered["achieved_at"])
     out_cols = ["rank", "steam_name", "Time", "Gap", "Gap To Leader", "Date"]
-    column_renames = {"rank": "Rank", "steam_name": "Player"}
-    st.table(df_leaderboard[condition][out_cols].rename(columns=column_renames).set_index('Rank'))
+    return filtered[out_cols].rename(columns={"rank": "Rank", "steam_name": "Player"}).set_index("Rank")
+
+
+def display_leaderboard(df_leaderboard, leaderboard_name, top_n=100):
+    formatted = _format_leaderboard(df_leaderboard, leaderboard_name, top_n)
+    st.dataframe(formatted, use_container_width=True)
 
 
 def info_box(icon, name, time, color="#262730"):
@@ -155,21 +157,20 @@ def _set_query_leaderboard(value: str):
 
 
 def main():
-    st.set_page_config("TFWR Leaderboards", ":trophy:")
-    st.set_page_config(layout="wide")
+    st.set_page_config("TFWR Leaderboards", ":trophy:", layout="wide")
 
     df_over_time, last_updated = load_over_time()
     df_snapshot = load_gaps_latest()
     df_percentiles = load_percentiles()
 
-    # Initialize from query param if provided
-    qp_selected = _get_query_leaderboard()
-    st.session_state.selected_leaderboard = qp_selected
+    if "selected_leaderboard" not in st.session_state:
+        st.session_state.selected_leaderboard = _get_query_leaderboard()
+
     with st.sidebar:
         st.write("The Farmer Was Replaced Leaderboards")
 
         for name in TABS:
-            is_active = name == st.session_state.selected_leaderboard 
+            is_active = name == st.session_state.selected_leaderboard
             button_name = f"{get_emoji(name)} {name}"
             if st.button(
                 button_name,
@@ -178,14 +179,14 @@ def main():
                 key=f"nav_{name}",
             ):
                 st.session_state.selected_leaderboard = name
-                _set_query_leaderboard(name)
-                st.rerun()
+
+    _set_query_leaderboard(st.session_state.selected_leaderboard)
 
     selected_leaderboard = st.session_state.selected_leaderboard
     if selected_leaderboard == 'Overview':
         for leaderboard_name in TABS[1:]:
             st.header(f"{get_emoji(leaderboard_name)} {leaderboard_name} Top 10")
-            display_leaderboard(df_snapshot, leaderboard_name, top_n=10, height='auto')
+            display_leaderboard(df_snapshot, leaderboard_name, top_n=10)
             display_last_updated(last_updated[leaderboard_name])
             st.divider()
     else:

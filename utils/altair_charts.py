@@ -6,8 +6,6 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from datetime import datetime, timezone
-
 from .constants import get_leaderboard_color, DEFAULT_COLOR
 from .prettify import prettify_colnames
 
@@ -119,73 +117,59 @@ def _series_dash(label: str):
     return [1, 0]
 
 
-def display_over_time_chart(
-    df: pd.DataFrame, leaderboard_name: str, hide_top_100: bool = True
-):
-    if "leaderboard_name" not in df.columns:
-        st.info("No leaderboard_name column found in over-time dataset.")
-        return
+def _format_ms(ms):
+    try:
+        ms = float(ms)
+    except Exception:
+        return ""
+    if not math.isfinite(ms):
+        return ""
+    if ms < 0:
+        ms = 0.0
+    total_seconds = int(ms // 1000)
+    millis = int(ms % 1000)
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{seconds:02d}.{millis:03d}"
+    return f"{minutes}:{seconds:02d}.{millis:03d}"
 
-    # Filter to selected leaderboard
+
+@st.cache_data(ttl=300)
+def _build_over_time_chart(df, leaderboard_name, hide_top_100):
+    if "leaderboard_name" not in df.columns:
+        return None, "No leaderboard_name column found in over-time dataset."
+
     sdf = df[df["leaderboard_name"] == leaderboard_name].copy()
     if sdf.empty:
-        st.info("No data available for this leaderboard.")
-        return
+        return None, "No data available for this leaderboard."
 
-    # Find time column and parse
     time_col = _find_time_column(sdf)
     if not time_col:
-        st.info("No time column found to plot over time.")
-        return
+        return None, "No time column found to plot over time."
     sdf[time_col] = pd.to_datetime(sdf[time_col], errors="coerce", utc=True)
     sdf = sdf.dropna(subset=[time_col])
     if sdf.empty:
-        st.info("No valid timestamps to plot.")
-        return
+        return None, "No valid timestamps to plot."
 
-    # Two-week window based on max timestamp in data
     max_ts = sdf[time_col].max()
     cutoff = max_ts - pd.Timedelta(days=14)
     sdf = sdf[sdf[time_col] >= cutoff]
     if sdf.empty:
-        st.info("No data in the last 14 days.")
-        return
+        return None, "No data in the last 14 days."
 
-    # Prepare value columns
     melted, series_col, value_col = _melt_measure_columns(sdf)
     if melted is None:
-        st.info("No duration columns found to plot.")
-        return
+        return None, "No duration columns found to plot."
 
-    # Optionally hide Top 100 series
     if series_col and hide_top_100:
         melted = melted[melted[series_col] != "Top 100"]
         if melted.empty:
-            st.info("No data to plot after filtering Top 100.")
-            return
-
-    # Add human-readable duration for single-series tooltip convenience
-    def _format_ms(ms: float) -> str:
-        try:
-            ms = float(ms)
-        except Exception:
-            return ""
-        if not math.isfinite(ms):
-            return ""
-        if ms < 0:
-            ms = 0.0
-        total_seconds = int(ms // 1000)
-        millis = int(ms % 1000)
-        hours = total_seconds // 3600
-        minutes = (total_seconds % 3600) // 60
-        seconds = total_seconds % 60
-        if hours > 0:
-            return f"{hours}:{minutes:02d}:{seconds:02d}.{millis:03d}"
-        return f"{minutes}:{seconds:02d}.{millis:03d}"
+            return None, "No data to plot after filtering Top 100."
 
     melted["value_hms"] = melted[value_col].apply(_format_ms)
 
-    # Compute default y max = 3 * latest Top 1 value (fallback: 3 * min latest across series)
     y_max = None
     if series_col:
         latest = melted.sort_values(time_col).groupby(series_col, as_index=False).last()
@@ -193,21 +177,17 @@ def display_over_time_chart(
         if not base_row.empty:
             base_val = float(base_row[value_col].iloc[0])
         else:
-            # Use smallest latest value among series as proxy
             base_val = float(latest[value_col].min())
         y_max = max(0.0, base_val * 3.0)
     else:
-        # Single series: use latest value
         last_val = float(melted.sort_values(time_col)[value_col].iloc[-1])
         y_max = max(0.0, last_val * 3.0)
 
-    # Build chart base with right edge anchored to current time
-    now_dt = datetime.now(timezone.utc)
+    domain_max = float((max_ts + pd.Timedelta(hours=1)).timestamp() * 1000)
     base = alt.Chart(melted).encode(
-        x=alt.X(f"{time_col}:T", title="Time", scale=alt.Scale(domainMax=now_dt))
+        x=alt.X(f"{time_col}:T", title="Time", scale=alt.Scale(domainMax=domain_max))
     )
 
-    # Human-readable axis labels (ms -> h:mm:ss or m:ss)
     ms_label_expr = (
         "floor(datum.value/3600000) > 0 ? "
         "floor(datum.value/3600000) + ':' + "
@@ -223,14 +203,11 @@ def display_over_time_chart(
         scale=alt.Scale(domainMin=0, domainMax=y_max),
     )
 
-    # Hover selection on x to enable hover-all tooltips
     hover = alt.selection_point(
         nearest=True, on="mouseover", fields=[time_col], empty=False
     )
-    # Enable pan/zoom on x only
     zoom_x = alt.selection_interval(bind="scales", encodings=["x"])
 
-    # Determine color: single-series uses leaderboard color; multi uses category color
     series_values = melted[series_col].unique().tolist() if series_col else ["duration"]
     if len(series_values) == 1:
         color_value = get_leaderboard_color(leaderboard_name)
@@ -239,7 +216,6 @@ def display_over_time_chart(
             color=alt.value(color_value),
         )
 
-        # Rule + tooltip at hovered x
         rule = (
             alt.Chart(melted)
             .mark_rule(color="gray")
@@ -256,7 +232,6 @@ def display_over_time_chart(
 
         chart = (line + rule).properties(height=300).add_params(zoom_x)
     else:
-        # Build domain/range mappings for color and dash
         domain = series_values
         color_range = [_series_color(lbl) for lbl in domain]
         dash_range = [_series_dash(lbl) for lbl in domain]
@@ -273,9 +248,7 @@ def display_over_time_chart(
             ),
         )
 
-        # Pivot by series for an all-series tooltip at hovered x (using prettified labels as fields)
-        # Also calculate human-readable duration strings per series for tooltip
-        def ms_expr(field: str) -> str:
+        def ms_expr(field):
             return (
                 f"isValid(datum['{field}']) ? (floor(datum['{field}']/3600000) > 0 ? "
                 f"floor(datum['{field}']/3600000) + ':' + "
@@ -306,4 +279,14 @@ def display_over_time_chart(
 
         chart = (line + rule).properties(height=300).add_params(zoom_x)
 
+    return chart, None
+
+
+def display_over_time_chart(
+    df: pd.DataFrame, leaderboard_name: str, hide_top_100: bool = True
+):
+    chart, error = _build_over_time_chart(df, leaderboard_name, hide_top_100)
+    if error:
+        st.info(error)
+        return
     st.altair_chart(chart, use_container_width=True)
