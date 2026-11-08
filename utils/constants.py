@@ -5,6 +5,23 @@ PERCENTILES_S3 = "s3://tfwr-data/leaderboard/percentiles.csv"
 
 TABS = [
     "Overview",
+    # The Miner Was Replaced DLC, in rough unlock order (no official order is
+    # published; inferred from Steam achievement completion rates).
+    "Ores",
+    "Ores Single",
+    "Rice",
+    "Rice Single",
+    "Bamboo",
+    "Bamboo Single",
+    "Mushrooms",
+    "Mushrooms Single",
+    "Dynamite",
+    "Dynamite Single",
+    "Treasure Map",
+    "Pyramids",
+    "Pyramids Single",
+    "Fastest Underground Reset",
+    # Base game
     "Hay",
     "Hay Single",
     "Wood",
@@ -32,7 +49,15 @@ COLORS = {
     "Maze": "#006400",  # dark green
     "Sunflowers": "#FFD700",  # gold
     "Dinosaur": "#808080",  # gray
-    "Fastest": "#DC143C",  # crimson
+    "Fastest Reset": "#DC143C",  # crimson
+    "Ores": "#708090",  # slate gray
+    "Rice": "#F5DEB3",  # wheat
+    "Bamboo": "#7CB342",  # bamboo green
+    "Mushrooms": "#B22222",  # firebrick
+    "Dynamite": "#FF4500",  # orange red
+    "Treasure Map": "#C19A6B",  # parchment brown
+    "Pyramids": "#EDC9AF",  # desert sand
+    "Fastest Underground Reset": "#6A5ACD",  # slate blue
 }
 
 EMOJIS = {
@@ -44,15 +69,27 @@ EMOJIS = {
     "Maze": ":jigsaw:",
     "Sunflowers": ":sunflower:",
     "Dinosaur": ":bone:",
-    "Fastest": ":fast_forward:",
+    "Fastest Reset": ":fast_forward:",
+    "Ores": ":pick:",
+    "Rice": ":rice:",
+    "Bamboo": ":bamboo:",
+    "Mushrooms": ":mushroom:",
+    "Dynamite": ":firecracker:",
+    "Treasure Map": ":world_map:",
+    "Pyramids": ":small_red_triangle:",
+    "Fastest Underground Reset": ":arrow_double_down:",
 }
 
 DEFAULT_COLOR = "#1f77b4"
 
 
+def _category(leaderboard_name):
+    return leaderboard_name.removesuffix(" Single")
+
+
 def get_leaderboard_color(leaderboard_name):
-    return COLORS.get(leaderboard_name.split()[0], DEFAULT_COLOR)
+    return COLORS.get(_category(leaderboard_name), DEFAULT_COLOR)
 
 
 def get_emoji(leaderboard_name):
-    return EMOJIS.get(leaderboard_name.split()[0], ":man_farmer:")
+    return EMOJIS.get(_category(leaderboard_name), ":man_farmer:")

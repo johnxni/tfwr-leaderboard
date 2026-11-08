@@ -8,23 +8,13 @@ from utils.constants import (
     GAPS_LATEST_S3,
     PERCENTILES_S3,
     TABS,
-    COLORS,
-    EMOJIS,
-    DEFAULT_COLOR,
+    get_emoji,
 )
 from utils.typing import (
     gap_ms_to_str,
     ms_to_str,
 )
 from utils.prettify import series_human_friendly_time, format_delta
-
-
-def get_leaderboard_color(leaderboard_name):
-    return COLORS.get(leaderboard_name.split()[0], DEFAULT_COLOR)
-
-
-def get_emoji(leaderboard_name):
-    return EMOJIS.get(leaderboard_name.split()[0], ":man_farmer:")
 
 
 @st.cache_data(ttl=300)
